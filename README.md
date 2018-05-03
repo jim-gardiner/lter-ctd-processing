@@ -1,2 +1,2 @@
-# ctd-processing
+# lter-ctd-processing
 Processing CTD data for NESLTER
