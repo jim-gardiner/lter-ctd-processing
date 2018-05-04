@@ -75,9 +75,17 @@ def parse_btl_file(path):
     # all done
     return df
 
+class BtlFile(object):
+    def __init__(self, path):
+        self.path = path
+    def to_dataframe(self):
+        df = parse_btl_file(self.path)
+        return df
+
 if __name__ == '__main__':
     import sys
     path = sys.argv[1]
     outpath = sys.argv[2]
-    df = parse_btl_file(path)
+    btl = BtlFile(path)
+    df = btl.to_dataframe()
     df.to_csv(outpath, index=False)
