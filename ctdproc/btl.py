@@ -1,8 +1,9 @@
 import math
-
+from glob import glob
+import os
 import pandas as pd 
 
-from .parsing import CtdTextParser
+from .parsing import CtdTextParser, pathname2cruise_cast
 
 def _col_values(line, col_widths):
     """read fixed with column values that are assumed
@@ -22,7 +23,7 @@ def p_to_z(p, latitude):
     """convert pressure to depth in seawater.
     p = pressure in dbars
     latitude"""
-    
+
     # for now, use the Seabird calculation
     # from http://www.seabird.com/document/an69-conversion-pressure-depth
 
@@ -113,11 +114,17 @@ class BtlFile(CtdTextParser):
 
         return p_to_z(prDM, self.lat)
 
+def find_btl_file(dir, cruise, cast):
+    for path in glob(os.path.join(dir, '*.btl')):
+        cr, ca = pathname2cruise_cast(path)
+        if cr.lower() == cruise.lower() and int(ca) == int(cast):
+            return BtlFile(path)
+
 if __name__ == '__main__':
     import sys
-    path = sys.argv[1]
+    in_path = sys.argv[1]
     outpath = sys.argv[2]
-    btl = BtlFile(path)
+    btl = BtlFile(in_path)
     print('Cruise: {}'.format(btl.cruise))
     print('Cast: {}'.format(btl.cast))
     print('Lat/lon: {}/{}'.format(btl.lat, btl.lon))

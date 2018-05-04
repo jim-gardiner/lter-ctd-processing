@@ -1,9 +1,10 @@
 import re
 import os
+from glob import glob
 
 import pandas as pd
 
-from .parsing import CtdTextParser
+from .parsing import CtdTextParser, pathname2cruise_cast
 
 class HdrFile(CtdTextParser):
     def __init__(self, path, parse=True):
@@ -40,6 +41,12 @@ class HdrFile(CtdTextParser):
         return self.definitions[name]
     def units(self, name):
         return self.units[name]
+
+def find_hdr_file(dir, cruise, cast):
+    for path in glob(os.path.join(dir, '*.hdr')):
+        cr, ca = pathname2cruise_cast(path)
+        if cr.lower() == cruise.lower() and int(ca) == int(cast):
+            return HdrFile(path)
 
 if __name__=='__main__':
     import sys
