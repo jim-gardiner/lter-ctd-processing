@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd 
 
 from .parsing import CtdTextParser
@@ -16,66 +18,22 @@ def _col_values(line, col_widths):
 
     return vals
 
-def parse_btl_file(path):
-    """parse a Seabird .btl file and return a Pandas dataframe"""
+def p_to_z(p, latitude):
+    """convert pressure to depth in seawater.
+    p = pressure in dbars
+    latitude"""
+    
+    # for now, use the Seabird calculation
+    # from http://www.seabird.com/document/an69-conversion-pressure-depth
 
-    # read lines of file, skipping headers
-    lines = []
+    # FIXME use GSW-Python
 
-    with open(path) as fin:
-        for l in fin.readlines():
-            # skip header lines
-            if l.startswith('#') or l.startswith('*'):
-                continue
-            lines.append(l.rstrip())
-
-    # column headers are fixed with at 11 characters per column,
-    # except the first two
-    h1_width = 10
-    h2_width = 12
-
-    n_cols = ((len(lines[0]) - (h1_width + h2_width)) // 11) + 2
-
-    header_col_widths = [h1_width,h2_width] + [11] * (n_cols - 2)
-
-    # the first line is the first line of column headers; skip the second
-    col_headers = _col_values(lines[0], header_col_widths)
-
-    # discard the header lines, the rest are data lines
-    lines = lines[2:]
-
-    # average values are every four lines
-    avg_lines = lines[::4]
-    # the lines with the time (and stddev values) are the ones immediately
-    # following the average value lines
-    time_lines = lines[1::4]
-
-    # value columns are fixed width 11 characters per col except the first two
-    v1_width = 7
-    v2_width = 15
-
-    col_widths = [7,15] + [11] * (n_cols - 2)
-
-    # now assemble the rows of the dataframe
-    rows = []
-
-    for al, tl in zip(avg_lines, time_lines):
-        cvs = _col_values(al, col_widths)
-        time = _col_values(tl, col_widths)[1] # just use the first value
-        cvs[1] = '{} {}'.format(cvs[1], time)
-        rows.append(cvs)
-
-    df = pd.DataFrame(rows, columns=col_headers)
-
-    # convert df columns to reasonable types
-    df.Bottle = df.Bottle.astype(int)
-    df.Date = pd.to_datetime(df.Date)
-
-    for c in df.columns[2:]:
-        df[c] = df[c].astype(float)
-        
-    # all done
-    return df
+    x = math.pow(math.sin(latitude / 57.29578),2)
+    g = 9.780318 * ( 1.0  + (5.2788e-3 + 2.36e-5 * x) * x ) + 1.092e-6 * p
+    
+    depth_m_sw = ((((-1.82e-15 * p + 2.279e-10) * p - 2.2512e-5) * p + 9.72659) * p) / g
+    
+    return depth_m_sw
 
 class BtlFile(CtdTextParser):
     def __init__(self, path, parse=True):
@@ -143,17 +101,17 @@ class BtlFile(CtdTextParser):
         # all done
         return df
 
-    def niskin_time(self, niskin_number):
+    def _niskin_sdf(self, niskin_number):
         df = self.to_dataframe()
-        sdf = df[df.Bottle == int(niskin_number)]
-        return sdf.Date.iloc[0]
+        return df[df.Bottle == int(niskin_number)]
+
+    def niskin_time(self, niskin_number):
+        return self._niskin_sdf(niskin_number).Date.iloc[0]
 
     def niskin_depth(self, niskin_number):
-        # TODO
-        # find pressure variable
-        # convert variable units as necessary
-        # pass latitude and pressure to p_to_z
-        return niskin_number # fake value for now
+        prDM = self._niskin_sdf(niskin_number).PrDM.iloc[0]
+
+        return p_to_z(prDM, self.lat)
 
 if __name__ == '__main__':
     import sys
@@ -167,4 +125,4 @@ if __name__ == '__main__':
     df = btl.to_dataframe()
     df.to_csv(outpath, index=False)
     for bn in df.Bottle:
-        print(bn, btl.niskin_time(bn))
+        print(bn, btl.niskin_time(bn), btl.niskin_depth(bn))
