@@ -6,7 +6,7 @@ import pandas as pd
 from .parsing import CtdTextParser, pathname2cruise_cast
 
 def _col_values(line, col_widths):
-    """read fixed with column values that are assumed
+    """read fixed-width column values that are assumed
     to be right-justified"""
     vals = []
     i = 0
@@ -67,11 +67,21 @@ class BtlFile(CtdTextParser):
         # discard the header lines, the rest are data lines
         lines = lines[2:]
 
+        # data lines are in groups of 4 (if min/max is written to the file)
+        # or in groups of 2
+
+        n_lines_per_sample = 2
+
+        for line in lines:
+            if line.endswith('(min)'): # min/max must be present
+                n_lines_per_sample = 4
+                break
+
         # average values are every four lines
-        avg_lines = lines[::4]
+        avg_lines = lines[::n_lines_per_sample]
         # the lines with the time (and stddev values) are the ones immediately
         # following the average value lines
-        time_lines = lines[1::4]
+        time_lines = lines[1::n_lines_per_sample]
 
         # value columns are fixed width 11 characters per col except the first two
         v1_width = 7
