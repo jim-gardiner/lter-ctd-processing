@@ -28,6 +28,7 @@ def pathname2cruise_cast(pathname):
         m = re.match(regex, fn)
         if m is not None:
             cruise, cast = m.groups()
+            cast = int(cast)
             return cruise, cast
     raise ValueError('unable to determine cruise and cast from "{}"'.format(pathname))
 
