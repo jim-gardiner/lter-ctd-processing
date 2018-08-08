@@ -73,7 +73,7 @@ class BtlFile(CtdTextParser):
         n_lines_per_sample = 2
 
         for line in lines:
-            if line.endswith('(min)'): # min/max must be present
+            if line.endswith('(min)'): # min/max are present
                 n_lines_per_sample = 4
                 break
 
@@ -109,6 +109,16 @@ class BtlFile(CtdTextParser):
         
         self._df = df
 
+        # add cruise / cast
+
+        df['Cruise'] = self.cruise
+        df['Cast'] = self.cast
+
+        # move those columns to the front
+        cols = df.columns.tolist()
+        cols = cols[-2:] + cols[:-2]
+        df = df[cols]
+
         # all done
         return df
 
@@ -130,16 +140,18 @@ def find_btl_file(dir, cruise, cast):
         if cr.lower() == cruise.lower() and int(ca) == int(cast):
             return BtlFile(path)
 
+def convert_file(in_path, out_path):
+    btl = BtlFile(in_path)
+    df = btl.to_dataframe()
+    df.to_csv(out_path, index=False)
+    return btl
+
 if __name__ == '__main__':
     import sys
     in_path = sys.argv[1]
-    outpath = sys.argv[2]
-    btl = BtlFile(in_path)
+    out_path = sys.argv[2]
+    btl = convert_file(in_path, out_path)
     print('Cruise: {}'.format(btl.cruise))
     print('Cast: {}'.format(btl.cast))
     print('Lat/lon: {}/{}'.format(btl.lat, btl.lon))
     print('Time: {}'.format(btl.time))
-    df = btl.to_dataframe()
-    df.to_csv(outpath, index=False)
-    for bn in df.Bottle:
-        print(bn, btl.niskin_time(bn), btl.niskin_depth(bn))
