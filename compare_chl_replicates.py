@@ -3,9 +3,6 @@ import os
 from matplotlib import pyplot as plt 
 import pandas as pd
 
-# disable spurious Pandas SettingWithCopy warning
-pd.options.mode.chained_assignment = None
-
 CRUISE = 'ar29'
 
 CHL_SPREADSHEET_FILE = r'\\sosiknas1\Backup\SPIROPA\SFDchl.xlsx'
@@ -17,12 +14,11 @@ def subset_rename_columns(df, current_cols, new_cols):
     df.columns = new_cols
     return df
 
-def distill_chl_spreadsheet(chl):
+def distill_chl_spreadsheet(raw):
     # can't use rows where Ra or Rb are na
-    chl = raw.dropna(subset=['Ra','Rb'])
+    chl = raw.dropna(subset=['Ra','Rb']).copy()
     # no such thing as na ints, so use 0 for cast to fill in nans
     chl['Cast #'] = chl['Cast #'].fillna(0).astype(int)
-    # ^ ignore spurious SettingWithCopy warning
 
     # rename columns
     current_cols = ['Cruise #:', 'Cast #', 'Niskin #', 'Filter\nSize', 'Replicate', 'Chl (ug/l)', 'Phaeo (ug/l)']
@@ -65,8 +61,8 @@ if __name__ == '__main__':
 
     # clean up and put replicates on same rows
     chl = distill_chl_spreadsheet(raw)
-    chl = merge_replicates(chl)
+    merged = merge_replicates(chl)
 
     # output results
-    plot_curve(chl, PLOT_OUTPUT_FILE) # plot
-    chl.to_csv(AB_OUTPUT_FILE, index=False) # csv data
+    plot_curve(merged, PLOT_OUTPUT_FILE) # plot
+    merged.to_csv(AB_OUTPUT_FILE, index=False) # csv data
