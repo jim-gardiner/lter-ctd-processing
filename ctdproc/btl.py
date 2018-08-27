@@ -5,16 +5,40 @@ import pandas as pd
 
 from .parsing import CtdTextParser, pathname2cruise_cast
 
-def _col_values(line, col_widths):
-    """read fixed-width column values that are assumed
-    to be right-justified"""
+# column names
+
+BOTTLE_COL = 'Bottle'
+DATE_COL = 'Date'
+# date column is the second column (index 1)
+DATE_COL_IX = 1
+
+PRESSURE_COL = 'PrDM'
+DEPTH_COL = 'DepSM'
+
+LAT_COL = 'Latitude'
+LON_COL = 'Longitude'
+
+CRUISE_COL = 'Cruise'
+CAST_COL = 'Cast'
+
+def _col_values(line, col_widths, justification='right'):
+    """read fixed-width column values"""
+    assert justification in ['left', 'right', 'center']
     vals = []
     i = 0
 
     for w in col_widths:
         start = i
         end = i + w
-        vals.append(line[start:end].lstrip())
+        raw_val = line[start:end]
+        # handle justification
+        if justification == 'right':
+            val = raw_val.lstrip()
+        elif justification == 'left':
+            val = raw_val.rstrip()
+        elif justification == 'center':
+            val = raw_val.lstrip().rstrip()
+        vals.append(val)
         i += w
 
     return vals
@@ -24,10 +48,8 @@ def p_to_z(p, latitude):
     p = pressure in dbars
     latitude"""
 
-    # for now, use the Seabird calculation
+    # use the Seabird calculation
     # from http://www.seabird.com/document/an69-conversion-pressure-depth
-
-    # FIXME use GSW-Python
 
     x = math.pow(math.sin(latitude / 57.29578),2)
     g = 9.780318 * ( 1.0  + (5.2788e-3 + 2.36e-5 * x) * x ) + 1.092e-6 * p
@@ -52,7 +74,7 @@ class BtlFile(CtdTextParser):
                 continue
             lines.append(l)
 
-        # column headers are fixed with at 11 characters per column,
+        # column headers are fixed width at 11 characters per column,
         # except the first two
         h1_width = 10
         h2_width = 12
@@ -77,42 +99,41 @@ class BtlFile(CtdTextParser):
                 n_lines_per_sample = 4
                 break
 
-        # average values are every four lines
+        # average values are every 2 or 4 lines
         avg_lines = lines[::n_lines_per_sample]
         # the lines with the time (and stddev values) are the ones immediately
         # following the average value lines
         time_lines = lines[1::n_lines_per_sample]
 
         # value columns are fixed width 11 characters per col except the first two
-        v1_width = 7
-        v2_width = 15
+        bottle_column_width = 7 # bottle number column
+        datetime_column_width = 15 # date/time column
 
-        col_widths = [7,15] + [11] * (n_cols - 2)
+        value_col_widths = [11] * (n_cols - 2)
+        col_widths = [bottle_column_width, datetime_column_width] + value_col_widths
 
         # now assemble the rows of the dataframe
         rows = []
 
         for al, tl in zip(avg_lines, time_lines):
             cvs = _col_values(al, col_widths)
-            time = _col_values(tl, col_widths)[1] # just use the first value
-            cvs[1] = '{} {}'.format(cvs[1], time)
+            # date/time is split across two rows
+            time = _col_values(tl, col_widths)[DATE_COL_IX]
+            cvs[DATE_COL_IX] = '{} {}'.format(cvs[DATE_COL_IX], time)
             rows.append(cvs)
 
         df = pd.DataFrame(rows, columns=col_headers)
 
         # convert df columns to reasonable types
-        df.Bottle = df.Bottle.astype(int)
-        df.Date = pd.to_datetime(df.Date)
+        df[BOTTLE_COL] = df[BOTTLE_COL].astype(int)
+        df[DATE_COL] = pd.to_datetime(df[DATE_COL])
 
         for c in df.columns[2:]:
             df[c] = df[c].astype(float)
-        
-        self._df = df
 
         # add cruise / cast
-
-        df['Cruise'] = self.cruise
-        df['Cast'] = self.cast
+        df[CRUISE_COL] = self.cruise
+        df[CAST_COL] = self.cast
 
         # move those columns to the front
         cols = df.columns.tolist()
@@ -120,23 +141,52 @@ class BtlFile(CtdTextParser):
         df = df[cols]
 
         # all done
+
+        self._df = df
+
         return df
 
-    def _niskin_sdf(self, niskin_number):
+
+    def _col(self, col_name):
         df = self.to_dataframe()
-        return df[df.Bottle == int(niskin_number)]
+        s = df[col_name]
+        s.index = df[BOTTLE_COL]
+        return s
 
-    def niskin_time(self, niskin_number):
-        return self._niskin_sdf(niskin_number).Date.iloc[0]
+    def _col_or_constant(self, col_name, constant):
+        df = self.to_dataframe()
+        if col_name not in df.columns:
+            return pd.Series(constant, index=df[BOTTLE_COL])
+        else:
+            return self._col(col_name)
 
-    def niskin_depth(self, niskin_number):
-        prDM = self._niskin_sdf(niskin_number).PrDM.iloc[0]
+    def times(self):
+        return self._col(DATE_COL)
 
-        return p_to_z(prDM, self.lat)
+    def lats(self):
+        return self._col_or_constant(LAT_COL, self.lat)
+
+    def lons(self):
+        return self._col_or_constant(LON_COL, self.lon)
+
+    def depths(self):
+        df = self.to_dataframe()
+        if DEPTH_COL in df.columns:
+            return self._col(DEPTH_COL)
+        elif PRESSURE_COL in df.columns:
+            ps = [p_to_z(p, self.lat) for p in df[PRESSURE_COL]]
+            s = pd.Series(ps)
+            s.index = df[BOTTLE_COL]
+            return s
+        else:
+            raise KeyError('no source of depth information found')
 
 def find_btl_file(dir, cruise, cast):
     for path in glob(os.path.join(dir, '*.btl')):
-        cr, ca = pathname2cruise_cast(path)
+        try:
+            cr, ca = pathname2cruise_cast(path)
+        except ValueError:
+            continue
         if cr.lower() == cruise.lower() and int(ca) == int(cast):
             return BtlFile(path)
 

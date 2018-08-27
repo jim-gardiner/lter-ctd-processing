@@ -33,13 +33,14 @@ def pathname2cruise_cast(pathname):
     raise ValueError('unable to determine cruise and cast from "{}"'.format(pathname))
 
 class TextParser(object):
-    def __init__(self, path, parse=True):
+    def __init__(self, path, parse=True, encoding='latin-1'):
         self.path = path
+        self.encoding = encoding
         if parse:
             self.parse()
     def parse(self):
         lines = []
-        with open(self.path) as fin:
+        with open(self.path, 'r', encoding=self.encoding) as fin:
             for line in fin.readlines():
                 lines.append(line.rstrip())
         self._lines = lines
