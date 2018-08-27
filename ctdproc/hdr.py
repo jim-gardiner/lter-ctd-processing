@@ -14,7 +14,7 @@ class HdrFile(CtdTextParser):
         self._parse_names()
     def _read_lines(self):
         self.lines = []
-        with open(self.path) as fin:
+        with open(self.path, 'r', encoding='latin-1') as fin:
             for l in fin.readlines():
                 if not l.startswith('*END*'):
                     self.lines.append(l.rstrip())
