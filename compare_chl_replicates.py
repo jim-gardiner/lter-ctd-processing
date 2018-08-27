@@ -3,6 +3,9 @@ import os
 from matplotlib import pyplot as plt 
 import pandas as pd
 
+# disable spurious Pandas SettingWithCopy warning
+pd.options.mode.chained_assignment = None
+
 CRUISE = 'ar29'
 
 CHL_SPREADSHEET_FILE = r'\\sosiknas1\Backup\SPIROPA\SFDchl.xlsx'
@@ -19,6 +22,7 @@ def distill_chl_spreadsheet(chl):
     chl = raw.dropna(subset=['Ra','Rb'])
     # no such thing as na ints, so use 0 for cast to fill in nans
     chl['Cast #'] = chl['Cast #'].fillna(0).astype(int)
+    # ^ ignore spurious SettingWithCopy warning
 
     # rename columns
     current_cols = ['Cruise #:', 'Cast #', 'Niskin #', 'Filter\nSize', 'Replicate', 'Chl (ug/l)', 'Phaeo (ug/l)']
